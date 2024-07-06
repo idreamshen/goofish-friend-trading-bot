@@ -10,7 +10,10 @@ class Game {
     }
 
     async init() {
-        const browser = await puppeteer.launch();
+        const browser = await puppeteer.launch({
+            args: ['--no-sandbox'],
+            timeout: 10000,
+        });
         this.page = await browser.newPage();
         await this.page.emulate(puppeteer.KnownDevices['iPhone 12 Pro']);
         
