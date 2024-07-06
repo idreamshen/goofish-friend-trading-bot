@@ -6,7 +6,6 @@ if (env != "") {
     const fileName = "./config-" + env + ".json";
     console.log(fileName);
     conf = require(fileName);
-    console.log(conf);
 }
 
 module.exports = conf;
