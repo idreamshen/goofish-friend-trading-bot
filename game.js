@@ -23,7 +23,15 @@ class Game {
         await this.reload();
 
         const interval = 10000; // 每10秒执行一次
+        let isRunning = false;
         setInterval(async () => {
+            if (isRunning) {
+                logger.warn(`上一轮未结束`);
+                return;
+            }
+
+            isRunning = true;
+
             try {
                 await this.reload();
                 const userInfo = await this.fetchUserInfo();
@@ -33,6 +41,8 @@ class Game {
                 await this.assignStaff();
             } catch (error) {
                 logger.error('Error', error);
+            } finally {
+                isRunning = false;
             }
         }, interval);
 
