@@ -1,8 +1,8 @@
 'use strict';
-const conf = require('./config');
 const Game = require('./game');
 
 (async () => {
-  const game = new Game(conf.cookies);
+  const game = new Game(process.env.COOKIE_STR);
+  await game.init();
   await game.start();
 })();

@@ -9,16 +9,14 @@ class Game {
         this.page = null;
     }
 
-    async start() {
+    async init() {
         const browser = await puppeteer.launch();
         this.page = await browser.newPage();
         await this.page.emulate(puppeteer.KnownDevices['iPhone 12 Pro']);
-        const cookies = parseCookies(this.cookieString, '.goofish.com');
+        
+    }
 
-        await this.page.goto('https://h5.m.goofish.com/wow/moyu/moyu-project/friend-trading/pages/home?titleVisible=false&loadingVisible=false&source=wdcard');
-        await this.delay(1000);
-        await this.page.setCookie(...cookies);
-        await this.delay(1000);
+    async start() {
         await this.reload();
 
         const interval = 10000; // 每10秒执行一次
@@ -39,6 +37,11 @@ class Game {
     }
 
     async reload() {
+        await this.page.goto('https://h5.m.goofish.com/wow/moyu/moyu-project/friend-trading/pages/home?titleVisible=false&loadingVisible=false&source=wdcard');
+        await this.delay(1000);
+        const cookies = parseCookies(this.cookieString, '.goofish.com');
+        await this.page.setCookie(...cookies);
+        await this.delay(1000);
         await this.page.reload();
         const btnMyStaff = await this.page.waitForSelector('span ::-p-text(我的员工)');
     }
