@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "local": "NODE_ENV=local node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

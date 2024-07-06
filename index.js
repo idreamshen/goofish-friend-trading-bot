@@ -1,5 +1,6 @@
 'use strict';
 const puppeteer = require('puppeteer');
+const conf = require('./config');
 
 function delay(time) {
   return new Promise(function(resolve) {
@@ -18,7 +19,7 @@ function parseCookies(cookieString, domain) {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
   await page.emulate(puppeteer.KnownDevices['iPhone 12 Pro']);
-  const cookieString = ''
+  const cookieString = conf.cookies;
   const cookies = parseCookies(cookieString, '.goofish.com');
 
   await page.goto('https://h5.m.goofish.com/wow/moyu/moyu-project/friend-trading/pages/home?titleVisible=false&loadingVisible=false&source=wdcard');
