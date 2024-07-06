@@ -42,5 +42,6 @@ RUN apt update && apt install -y \
 
 WORKDIR /app
 ADD . /app/
-RUN ls /app/
+
+CMD ["node", "index.js"]
 
