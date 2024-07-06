@@ -18,6 +18,7 @@
   },
   "homepage": "https://github.com/idreamshen/goofish-friend-trading-bot#readme",
   "dependencies": {
-    "puppeteer": "^22.12.1"
+    "puppeteer": "^22.12.1",
+    "winston": "^3.13.0"
   }
 }

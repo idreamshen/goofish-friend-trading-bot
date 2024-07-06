@@ -1,5 +1,6 @@
 const puppeteer = require('puppeteer');
 const util = require('util');
+const logger = require('./logger');
 
 class Game {
 
@@ -24,13 +25,17 @@ class Game {
         setInterval(async () => {
             try {
                 await this.reload();
+                const userInfo = await this.fetchUserInfo();
+                logger.info(`当前等级=${userInfo.level} 身价=${userInfo.worth} 金币=${userInfo.balance} 员工数量=${userInfo.staffNum} 老板名字=${userInfo.bossName}`);
                 await this.completeTasks();
                 await this.inviteStaff();   
                 await this.assignStaff();
             } catch (error) {
-                console.error('Error executing tasks:', error);
+                logger.error('Error', error);
             }
         }, interval);
+
+        logger.info("开始游戏");
     }
 
     async reload() {
@@ -39,7 +44,7 @@ class Game {
     }
 
     async assignStaff() {
-        console.log("开始派活员工");
+        logger.info("开始巡检员工");
         await this.reload();
         const btnMyStaff = await this.page.waitForSelector('span ::-p-text(我的员工)');
         await btnMyStaff.click();
@@ -60,13 +65,13 @@ class Game {
                 const clickBtn = await staff.$('span ::-p-text(派活)');
                 if (clickBtn) {
                     await clickBtn.evaluate(b => b.click());
-                    console.log(util.format("已分配员工 %s 干活", staffNickName));
+                    logger.info(util.format("已分配员工 %s 干活", staffNickName));
                 }
             } else if (staffStatus.includes("待领取")) {
                 const clickBtn = await staff.$('span[class*="MyStaff--interactiveTxt"] ::-p-text(领取)');
                 if (clickBtn) {
                     await clickBtn.evaluate(b => b.click());
-                    console.log(util.format("已领取员工 %s 收益", staffNickName));
+                    logger.info(util.format("已领取员工 %s 收益", staffNickName));
                 }
             }
         }
@@ -106,15 +111,16 @@ class Game {
             "bossName": bossName, // 老板名字
         };
 
+
         return userInfo;
     }
 
     async inviteStaff() {
-        console.log("开始邀请员工")
+        logger.info("开始巡检雇佣");
         const userInfo = await this.fetchUserInfo();
         const freeSlot = userInfo.maxStaffNum - userInfo.staffNum;
         if (freeSlot <= 0) {
-            console.log(util.format('员工人数已满，无需雇佣新员工。当前员工数=%d', userInfo.staffNum));
+            logger.info(`员工人数已满，无需雇佣新员工。当前员工数=${userInfo.staffNum}`);
             return;
         }
 
@@ -148,7 +154,7 @@ class Game {
             }
         }
 
-        console.log(util.format("找到 %d 个可雇佣员工，当前需要雇佣 %d 个", hirableStaffs.length, freeSlot));
+        logger.info(util.format("找到 %d 个可雇佣员工，当前需要雇佣 %d 个", hirableStaffs.length, freeSlot));
 
         if (hirableStaffs.length <= 0) {
             return;
@@ -162,22 +168,22 @@ class Game {
         const closeNode = await this.page.$('img[class*="commonPop--popClose"]');
         if (!inWorkNode) {
             await confirmNode.evaluate(b => b.click());
-            console.log(util.format("雇佣 %s", hirableStaff.nickname));
+            logger.info(util.format("雇佣 %s", hirableStaff.nickname));
             await this.page.$('img[class*="commonPop--popClose"]', { hidden: true });
         } else {
-            console.log(util.format("%s 已有雇主，不雇佣", hirableStaff.nickname));
+            logger.info(util.format("%s 已有雇主，不雇佣", hirableStaff.nickname));
             await closeNode.evaluate(b => b.click());
             await this.page.$('img[class*="commonPop--popClose"]', { hidden: true });
         }
     }
 
     async completeTasks() {
-        console.log("开始处理任务");
+        logger.info("开始巡检任务");
         await this.page.waitForSelector('div[class*="Main--goldBtn"]');
         await this.page.click('div[class*="Main--goldBtn"]');
         await this.page.waitForSelector('div[class*="taskItem"]')
         const tasks = await this.page.$$('div[class*="taskItem"]');
-        console.log(util.format("加载 %d 个任务", tasks.length));
+        logger.info(util.format("加载 %d 个任务", tasks.length));
       
         for (const task of tasks) {
             const taskTitleNode = await task.$('span[class*="title"]');
@@ -188,7 +194,7 @@ class Game {
                 const tmp = await taskAcceptBtn.$('span');
                 if (!tmp) {
                     await taskAcceptBtn.evaluate(b => b.click());
-                    console.log(util.format("领取任务奖励: %s", taskTitle));
+                    logger.info(util.format("领取任务奖励: %s", taskTitle));
                     await this.delay(50);
                 }
             }
