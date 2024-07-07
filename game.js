@@ -16,7 +16,6 @@ class Game {
         });
         this.page = await browser.newPage();
         await this.page.emulate(puppeteer.KnownDevices['iPhone 12 Pro']);
-        
     }
 
     async start() {
@@ -34,11 +33,33 @@ class Game {
 
             try {
                 await this.reload();
-                const userInfo = await this.fetchUserInfo();
-                logger.info(`当前等级=${userInfo.level} 身价=${userInfo.worth} 金币=${userInfo.balance} 员工数量=${userInfo.staffNum} 老板名字=${userInfo.bossName}`);
+                // 收集员工收益
+                await this.collectStaffIncome();
+                // 完成任务
                 await this.completeTasks();
-                await this.inviteStaff();   
-                await this.assignStaff();
+                await this.updateUserInfo();
+                logger.info(`个人信息: ${JSON.stringify(this.userInfo)}`);
+                await this.updateStaffs();
+                logger.info(`我的员工: ${JSON.stringify(this.staffs)}`);
+                await this.updatehirableStaffs();
+                logger.info(`可雇佣员工: ${JSON.stringify(this.hirableStaffs)}`);
+
+                // 解雇最差员工
+                if (await this.layoffWorstStaff()) {
+                    await this.updateUserInfo();
+                    logger.info(`解雇员工后，个人信息: ${JSON.stringify(this.userInfo)}`);
+                    await this.updateStaffs();
+                    logger.info(`解雇员工后，我的员工: ${JSON.stringify(this.staffs)}`);
+                }
+                // 雇佣员工
+                await this.hireStaff();
+                // 派活员工
+                await this.assignStaffWork();
+                
+                await this.updateUserInfo();
+                logger.info(`个人信息: ${JSON.stringify(this.userInfo)}`);
+                await this.updateStaffs();
+                logger.info(`我的员工: ${JSON.stringify(this.staffs)}`);
             } catch (error) {
                 logger.error('Error', error);
             } finally {
@@ -59,44 +80,7 @@ class Game {
         const btnMyStaff = await this.page.waitForSelector('span ::-p-text(我的员工)');
     }
 
-    async assignStaff() {
-        logger.info("开始巡检员工");
-        await this.reload();
-        const btnMyStaff = await this.page.waitForSelector('span ::-p-text(我的员工)');
-        await btnMyStaff.click();
-        await this.delay(100);
-
-        await this.page.waitForSelector('div[class*="MyStaff--myStaffItem"]');
-        await this.delay(100);
-
-        const staffs = await this.page.$$('div[class*="MyStaff--myStaffItem"]');
-        for (const staff of staffs) {
-            const staffNickNameNode = await staff.$('span[class*="MyStaff--myStaffNick"]');
-            const staffNickName = await this.page.evaluate(element => element.textContent, staffNickNameNode);
-
-            const staffStatusNode = await staff.$('div[class*="MyStaff--myStaffStatus"]');
-            const staffStatus = await this.page.evaluate(element => element.textContent, staffStatusNode);
-
-            if (staffStatus == "摸鱼中") {
-                const clickBtn = await staff.$('span ::-p-text(派活)');
-                if (clickBtn) {
-                    await clickBtn.evaluate(b => b.click());
-                    logger.info(util.format("已分配员工 %s 干活", staffNickName));
-                }
-            } else if (staffStatus.includes("待领取")) {
-                const clickBtn = await staff.$('span[class*="MyStaff--interactiveTxt"] ::-p-text(领取)');
-                if (clickBtn) {
-                    await clickBtn.evaluate(b => b.click());
-                    logger.info(util.format("已领取员工 %s 收益", staffNickName));
-                }
-            }
-        }
-
-        await this.page.click('img[class*="MyStaff--myStaffClose"]');
-        await this.page.waitForSelector('img[class*="MyStaff--myStaffClose"]', { hidden: true });
-    }
-
-    async fetchUserInfo() {
+    async updateUserInfo() {
         const levelNode = await this.page.waitForSelector('span[class*="UserInfo--userLevel"]');
         const levelStr = levelNode ? await this.page.evaluate(element => element.textContent, levelNode) : null;
         const level = levelStr ? parseInt(levelStr.replace('Lv.', '')) : 0;
@@ -104,8 +88,8 @@ class Game {
         const balanceNode = await this.page.waitForSelector('span[class*="UserInfo--balance"]');
         const balance = balanceNode ? parseInt(await this.page.evaluate(element => element.textContent, balanceNode)) : 0;
         
-        const worthNode = await this.page.waitForSelector('span[class*="UserInfo--description"] ::-p-text(身价) span');
-        const worth = worthNode ? parseInt(await this.page.evaluate(element => element.textContent, worthNode)) : 0;
+        const priceNode = await this.page.waitForSelector('span[class*="UserInfo--description"] ::-p-text(身价) span');
+        const price = priceNode ? parseInt(await this.page.evaluate(element => element.textContent, priceNode)) : 0;
 
         const staffNumNode = await this.page.waitForSelector('span[class*="UserInfo--description"] ::-p-text(员工) span');
         const staffNum = staffNumNode ? parseInt(await this.page.evaluate(element => element.textContent, staffNumNode)) : 0;
@@ -120,35 +104,61 @@ class Game {
         
         const userInfo = {
             "level": level, // 等级
-            "worth": worth, // 身价
+            "price": price, // 身价
             "balance": balance, // 金币
             "staffNum": staffNum, // 员工数量
             "maxStaffNum": maxStaffNum, // 最大员工数量
             "bossName": bossName, // 老板名字
         };
 
-
-        return userInfo;
+        this.userInfo = userInfo;
     }
 
-    async inviteStaff() {
-        logger.info("开始巡检雇佣");
-        const userInfo = await this.fetchUserInfo();
-        const freeSlot = userInfo.maxStaffNum - userInfo.staffNum;
-        if (freeSlot <= 0) {
-            logger.info(`员工人数已满，无需雇佣新员工。当前员工数=${userInfo.staffNum}`);
-            return;
+    async updateStaffs() {
+        const btnMyStaff = await this.page.waitForSelector('span ::-p-text(我的员工)');
+        await btnMyStaff.click();
+        await this.page.waitForSelector('div[class*="MyStaff--myStaffItem"]');
+        const staffNodes = await this.page.$$('div[class*="MyStaff--myStaffItem"]');
+        let staffs = [];
+        for (const staffNode of staffNodes) {
+            const staffNickNameNode = await staffNode.$('span[class*="MyStaff--myStaffNick"]');
+            const staffNickName = await this.page.evaluate(element => element.textContent, staffNickNameNode);
+
+            const staffStatusNode = await staffNode.$('div[class*="MyStaff--myStaffStatus"]');
+            const staffStatus = await this.page.evaluate(element => element.textContent, staffStatusNode);
+
+            const staffPriceNode = await staffNode.waitForSelector('span[class*="MyStaff--myStaffPrice"] ::-p-text(身价)');
+            const staffPriceStr = staffPriceNode ? await this.page.evaluate(element => element.textContent, staffPriceNode) : null;
+            const staffPrice = staffPriceStr ? parseInt(staffPriceStr.match(/(\d+)/)[1]) : 0;
+
+            const staffIncomeNode = await staffNode.waitForSelector('span[class*="MyStaff--myStaffIncome"]');
+            const staffIncomeStr = staffIncomeNode ? await this.page.evaluate(element => element.textContent, staffIncomeNode) : null;
+            const staffIncome = staffIncomeStr ? parseInt(staffIncomeStr.match(/(\d+)/)[1]) : 0;
+            
+            staffs.push({
+                "nickname": staffNickName,
+                "status": staffStatus,
+                "price": staffPrice,
+                "income": staffIncome,
+            });
         }
 
+        await this.page.click('img[class*="MyStaff--myStaffClose"]');
+        await this.page.waitForSelector('img[class*="MyStaff--myStaffClose"]', { hidden: true });
+
+        this.staffs = staffs;
+    }
+
+    async updatehirableStaffs() {
         let hirableStaffs = [];
         const employNodes = await this.page.$$('div[class*="UserItem--employItem"]');
         for (const employNode of employNodes) {
             const employNicknameNode = await employNode.$('span[class*="UserItem--employNick"]');
             const employNickname = employNicknameNode ? await this.page.evaluate(element => element.textContent, employNicknameNode) : "";
 
-            const employWorthNode = await employNode.$('span[class*="UserItem--employPrice"]');
-            const employWorthStr = employWorthNode ? await this.page.evaluate(element => element.textContent, employWorthNode) : null;
-            const employWorth = employWorthNode ? parseInt(employWorthStr.match(/(\d+)/)[1]) : 0;
+            const employPriceNode = await employNode.$('span[class*="UserItem--employPrice"]');
+            const employPriceStr = employPriceNode ? await this.page.evaluate(element => element.textContent, employPriceNode) : null;
+            const employPrice = employPriceNode ? parseInt(employPriceStr.match(/(\d+)/)[1]) : 0;
 
             const employIncomeNode = await employNode.$('span[class*="UserItem--employIncome"] span');
             const employIncomeStr = employIncomeNode ? await this.page.evaluate(element => element.textContent, employIncomeNode) : null;
@@ -159,38 +169,213 @@ class Game {
             const employStatus = employStatusNode ? await this.page.evaluate(element => element.textContent, employStatusNode) : "";
             if (employStatus == "雇佣") {
                 hirableStaffs.push({
-                    "node": employNode,
-                    "statusNode": employStatusNode,
                     "nickname": employNickname,
-                    "worth": employWorth,
+                    "price": employPrice,
                     "income": employIncome,
                     "status": employStatus,
-
                 });
             }
         }
 
-        logger.info(util.format("找到 %d 个可雇佣员工，当前需要雇佣 %d 个", hirableStaffs.length, freeSlot));
+        this.hirableStaffs = hirableStaffs;
+    }
 
-        if (hirableStaffs.length <= 0) {
-            return;
+    async collectStaffIncome() {
+        logger.info("开始收集打工收益");
+        const btnMyStaff = await this.page.waitForSelector('span ::-p-text(我的员工)');
+        await btnMyStaff.evaluate(b => b.click());
+        await this.page.waitForSelector('div[class*="MyStaff--myStaffItem"]');
+        const staffs = await this.page.$$('div[class*="MyStaff--myStaffItem"]');
+
+        let found = false;
+
+        for (const staff of staffs) {
+            const staffNickNameNode = await staff.$('span[class*="MyStaff--myStaffNick"]');
+            const staffNickName = await this.page.evaluate(element => element.textContent, staffNickNameNode);
+
+            const staffStatusNode = await staff.$('div[class*="MyStaff--myStaffStatus"]');
+            const staffStatus = await this.page.evaluate(element => element.textContent, staffStatusNode);
+
+            if (staffStatus.includes("待领取")) {
+                const clickBtn = await staff.$('span[class*="MyStaff--interactiveTxt"] ::-p-text(领取)');
+                if (clickBtn) {
+                    found = true;
+                    await clickBtn.evaluate(b => b.click());
+                    logger.info(util.format("已领取员工 %s 收益", staffNickName));
+                }
+            }
         }
 
-        const hirableStaff = hirableStaffs[0];
-        await hirableStaff.statusNode.evaluate(b => b.click());
+        if (!found) {
+            logger.info('暂未找到可以领取的打工收益');
+        }
+
+        await this.page.click('img[class*="MyStaff--myStaffClose"]');
+        await this.page.waitForSelector('img[class*="MyStaff--myStaffClose"]', { hidden: true });
+    }
+
+    async layoffWorstStaff() {
+        logger.info("开始淘汰最差员工");
+
+        if (this.userInfo.staffNum < this.userInfo.maxStaffNum) {
+            logger.info("员工人数未饱和，无需淘汰");
+            return false;
+        }
+
+        this.staffs.sort((a, b) => a.income - b.income);
+        const minIncome = this.staffs[0].income;
+
+        const freeMinIncomeStaffs = this.staffs
+            .filter(item => item.status.includes("摸鱼"))
+            .filter(item => item.income == minIncome);
+
+        if (freeMinIncomeStaffs.length <= 0) {
+            logger.info("未找到低收益的空闲员工，无需淘汰");
+            return false;
+        }
+
+        const targetStaff = freeMinIncomeStaffs[0];
+
+        const btnMyStaff = await this.page.waitForSelector('span ::-p-text(我的员工)');
+        await btnMyStaff.click();
+        await this.page.waitForSelector('div[class*="MyStaff--myStaffItem"]');
+        const staffs = await this.page.$$('div[class*="MyStaff--myStaffItem"]');
+        let found = false;
+
+        for (const staff of staffs) {
+            const staffNickNameNode = await staff.$('span[class*="MyStaff--myStaffNick"]');
+            const staffNickName = await this.page.evaluate(element => element.textContent, staffNickNameNode);
+
+            const staffStatusNode = await staff.$('div[class*="MyStaff--myStaffStatus"]');
+            const staffStatus = await this.page.evaluate(element => element.textContent, staffStatusNode);
+
+            if (staffNickName == targetStaff.nickname) {
+                if (staffStatus.includes("摸鱼")) {
+                    logger.warn(`待解雇员工 ${staffNickName} 状态错误，当前为 ${staffStatus}`);
+                    continue;
+                }
+                const clickBtn = await staff.$('span ::-p-text(解雇)');
+                if (clickBtn) {
+                    found = true;
+                    await clickBtn.evaluate(b => b.click());
+                    logger.info(`已解雇员工 ${staffNickName}`);
+                }
+            }
+        }
+
+        await this.page.click('img[class*="MyStaff--myStaffClose"]');
+        await this.page.waitForSelector('img[class*="MyStaff--myStaffClose"]', { hidden: true });
+
+        return found;
+    }
+
+    async assignStaffWork() {
+        logger.info("开始派活员工");
+        await this.reload();
+        const btnMyStaff = await this.page.waitForSelector('span ::-p-text(我的员工)');
+        await btnMyStaff.click();
+        await this.page.waitForSelector('div[class*="MyStaff--myStaffItem"]');
+
+        let found = false;
+
+        const staffs = await this.page.$$('div[class*="MyStaff--myStaffItem"]');
+        logger.info(`找到 ${staffs.length} 位员工`);
+        for (const staff of staffs) {
+            const staffNickNameNode = await staff.$('span[class*="MyStaff--myStaffNick"]');
+            const staffNickName = await this.page.evaluate(element => element.textContent, staffNickNameNode);
+
+            const staffStatusNode = await staff.$('div[class*="MyStaff--myStaffStatus"]');
+            const staffStatus = await this.page.evaluate(element => element.textContent, staffStatusNode);
+
+            if (staffStatus == "摸鱼中") {
+                const clickBtn = await staff.$('span ::-p-text(派活)');
+                if (clickBtn) {
+                    await clickBtn.evaluate(b => b.click());
+                    logger.info(util.format("已分配员工 %s 干活", staffNickName));
+                    found = true;
+                }
+            }
+        }
+
+        if (found == false) {
+            logger.info("当前员工均在忙碌中");
+        }
+
+        await this.page.click('img[class*="MyStaff--myStaffClose"]');
+        await this.page.waitForSelector('img[class*="MyStaff--myStaffClose"]', { hidden: true });
+    }
+
+    async hireStaff() {
+        logger.info("开始雇佣新员工");
+        const freeSlot = this.userInfo.maxStaffNum - this.userInfo.staffNum;
+        if (freeSlot <= 0) {
+            logger.info('没有空闲位置，无需雇佣新员工');
+            return false;
+        }
+
+        if (this.hirableStaffs.length <= 0) {
+            logger.info('未找到可以雇佣的新员工');
+            return false;
+        }
+
+        this.staffs.sort((a, b) => a.income - b.income);
+        const minIncome = this.staffs.length ? this.staffs[0].income : 0;
+        const minIncomeNickname = this.staffs.length ? this.staffs[0].nickname : "unknown";
+
+        this.hirableStaffs.sort((a, b) => b.income - a.income);
+        const maxHirableNickname = this.hirableStaffs[0].nickname;
+        const maxHirableIncome = this.hirableStaffs[0].income;
+
+        if (maxHirableIncome <= minIncome) {
+            logger.info('新员工收入未超过老员工，无需雇佣');
+            return false;
+        }
+
+        logger.info(`发现新员工[${maxHirableNickname}]收入(${maxHirableIncome})比当前最低收入(${minIncome})员工[${minIncomeNickname}]高，准备雇佣新员工`);
+
+        const employNodes = await this.page.$$('div[class*="UserItem--employItem"]');
+        let targetEmployStatusNode = null;
+        for (const employNode of employNodes) {
+            const employNicknameNode = await employNode.$('span[class*="UserItem--employNick"]');
+            const employNickname = employNicknameNode ? await this.page.evaluate(element => element.textContent, employNicknameNode) : "";
+
+            const employPriceNode = await employNode.$('span[class*="UserItem--employPrice"]');
+            const employPriceStr = employPriceNode ? await this.page.evaluate(element => element.textContent, employPriceNode) : null;
+            const employPrice = employPriceNode ? parseInt(employPriceStr.match(/(\d+)/)[1]) : 0;
+
+            const employIncomeNode = await employNode.$('span[class*="UserItem--employIncome"] span');
+            const employIncomeStr = employIncomeNode ? await this.page.evaluate(element => element.textContent, employIncomeNode) : null;
+            const employIncome = employIncomeNode ? parseInt(employIncomeStr.match(/(\d+)/)[1]) : 0;
+
+            const employStatusNode = await employNode.$('div[class*="UserItem--employBtn"]');
+            // 邀请 打工中 雇佣
+            const employStatus = employStatusNode ? await this.page.evaluate(element => element.textContent, employStatusNode) : "";
+
+            if (employNickname == maxHirableNickname) {
+                if (employIncome != maxHirableIncome) {
+                    logger.warn('收益匹配失败');
+                    continue;
+                }
+
+                targetEmployStatusNode = employStatusNode;
+                break;
+            }
+            
+        }
+
+        if (targetEmployStatusNode == null) {
+            logger.warn('未能找到目标员工');
+            return false;
+        }
+
+        await targetEmployStatusNode.evaluate(b => b.click());
 
         const confirmNode = await this.page.waitForSelector('div[class*="commonPop--popConfirmBtn"]');
-        const inWorkNode = await this.page.$('span ::-p-text(他正在为)');
         const closeNode = await this.page.$('img[class*="commonPop--popClose"]');
-        if (!inWorkNode) {
-            await confirmNode.evaluate(b => b.click());
-            logger.info(util.format("雇佣 %s", hirableStaff.nickname));
-            await this.page.$('img[class*="commonPop--popClose"]', { hidden: true });
-        } else {
-            logger.info(util.format("%s 已有雇主，不雇佣", hirableStaff.nickname));
-            await closeNode.evaluate(b => b.click());
-            await this.page.$('img[class*="commonPop--popClose"]', { hidden: true });
-        }
+        await confirmNode.evaluate(b => b.click());
+        logger.info(util.format("雇佣 %s", maxHirableNickname));
+        await this.page.$('img[class*="commonPop--popClose"]', { hidden: true });
+        return true;
     }
 
     async completeTasks() {
