@@ -171,6 +171,7 @@ class Game {
                 const clickBtn = await staff.$('span[class*="MyStaff--interactiveTxt"] ::-p-text(领取)');
                 if (clickBtn) {
                     found = true;
+                    await this.delay(500);
                     await clickBtn.evaluate(b => b.click());
                     logger.info(util.format("已领取员工 %s 收益", staffNickName));
                 }
