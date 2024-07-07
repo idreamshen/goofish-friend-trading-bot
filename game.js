@@ -80,7 +80,15 @@ class Game {
         const level = levelStr ? parseInt(levelStr.replace('Lv.', '')) : 0;
 
         const balanceNode = await this.page.waitForSelector('span[class*="UserInfo--balance"]');
-        const balance = balanceNode ? parseInt(await this.page.evaluate(element => element.textContent, balanceNode)) : 0;
+        const balanceStr = balanceNode ? await this.page.evaluate(element => element.textContent, balanceNode) : null;
+        let balance = 0;
+        if (balanceStr) {
+            if (balanceStr.includes('万')) {
+                balance = parseInt(parseFloat(balanceStr.replace('万', '')) * 10000);
+            } else {
+                balance = parseInt(balanceStr);
+            }
+        }
         
         const priceNode = await this.page.waitForSelector('span[class*="UserInfo--description"] ::-p-text(身价) span');
         const price = priceNode ? parseInt(await this.page.evaluate(element => element.textContent, priceNode)) : 0;
