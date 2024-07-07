@@ -17,6 +17,9 @@ docker run -e COOKIE_STR='' -d idreamshen/goofish-friend-trading-bot:main
 - COOKIE_STR 为 https://h5.m.goofish.com/wow/moyu/moyu-project/friend-trading/pages/home?titleVisible=false&loadingVisible=false&source=wdcard 该网页中的 cookie，需自行登陆成功进入游戏后，将 cookie 复制给 COOKIE_STR 变量
 - COOKIE_STR 的值类似为 '__itrace_wid=***; cookie2=***; cna=***; _samesite_flag_=***; t=***; _tb_token_=***; xlly_s=***; unb=***; mtop_partitioned_detect=***; _m_h5_tk=***; _m_h5_tk_enc=***; sgcookie=***; csg=***; isg=***; tfstk=***'
 
+# 游戏截图
+![game screenshot](./game.jpg)
+
 # 日志一览
 ```
 [2024-07-07 15:43:31] info: 开始游戏
