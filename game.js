@@ -293,6 +293,7 @@ class Game {
                     await clickBtn.evaluate(b => b.click());
                     logger.info(util.format("已分配员工 %s 干活", staffNickName));
                     found = true;
+                    this.delay(1000);
                 }
             }
         }
