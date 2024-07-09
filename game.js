@@ -15,6 +15,7 @@ class Game {
             timeout: 10000,
         });
         this.page = await browser.newPage();
+        this.page.setDefaultTimeout(10000);
         await this.page.emulate(puppeteer.KnownDevices['iPhone 12 Pro']);
     }
 
