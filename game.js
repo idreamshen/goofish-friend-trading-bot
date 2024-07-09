@@ -196,6 +196,12 @@ class Game {
 
         this.staffs.sort((a, b) => a.income - b.income);
         const minIncome = this.staffs[0].income;
+        const maxIncome = this.staffs[this.staffs.length - 1].income;
+
+        if (minIncome >= 300) {
+            logger.info("最差员工收益满足300金币以上，无需淘汰");
+            return false;
+        }
 
         const freeMinIncomeStaffs = this.staffs
             .filter(item => item.status.includes("摸鱼"))
