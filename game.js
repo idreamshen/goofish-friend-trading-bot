@@ -337,12 +337,21 @@ class Game {
             return false;
         }
 
-        if (maxHirableIncome <= minIncome) {
-            logger.info('新员工收入未超过老员工，无需雇佣');
+        if (freeSlot <= 1) {
+            // 最后一个空位，必须要招聘更优质的
+            if (maxHirableIncome <= minIncome) {
+                logger.info('新员工收入未超过老员工，无需雇佣');
+                return false;
+            }
+        }
+
+        // 剩余多个空位，尝试选择一个
+        if (maxHirableIncome + freeSlot * 20 < minIncome) {
+            logger.info(`最好新员工与最差老员工的收益差过大，新员工[${maxHirableNickname}]收入(${maxHirableIncome})金币，老员工[${minIncomeNickname}]收入(${minIncome})金币`);
             return false;
         }
 
-        logger.info(`发现新员工[${maxHirableNickname}]收入(${maxHirableIncome})比当前最低收入(${minIncome})员工[${minIncomeNickname}]高，准备雇佣新员工`);
+        logger.info(`可以雇佣新员工，新员工[${maxHirableNickname}]收入(${maxHirableIncome})金币，老员工[${minIncomeNickname}]收入(${minIncome})金币`);
 
         if (maxHirablePrice > this.userInfo.balance) {
             logger.info(`当前金币不够，无法雇佣新员工。新员工身价${maxHirablePrice}，当前金币${this.userInfo.balance}`);
