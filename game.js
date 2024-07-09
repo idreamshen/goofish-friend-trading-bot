@@ -270,7 +270,7 @@ class Game {
             if (staffStatus == "摸鱼中") {
                 const clickBtn = await staff.$('span ::-p-text(派活)');
                 if (clickBtn) {
-                    this.delay(1000);
+                    await this.delay(1000);
                     await clickBtn.evaluate(b => b.click());
                     logger.info(util.format("已分配员工 %s 干活", staffNickName));
                     found = true;
